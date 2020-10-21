@@ -9,7 +9,7 @@ play(_) :- write("La cantidad de jugadores debe ser: 2, 3 o 4.").
 
 
 %crear la bolsa de losas
-create_bag(Bag) :- create_bag(100, Pieces), flatten(Pieces, OBag), random_permutation(OBag, Bag).
+create_bag(Bag) :- create_bag(100, Pieces), flatten(Pieces, Bag).
 create_bag(20, Bag):- findall(1, between(1, 20, _), Bag).
 create_bag(X, [Y,Bag]):- 
     N is X // 20,
@@ -37,40 +37,71 @@ wall(X):- X =  [[1:0, 2:0, 3:0, 4:0, 5:0],
 %crear basurero del jugador
 garbage(X):- X = [-1:0, -1:0, -2:0, -2:0, -2:0, -3:0, -3:0].
 
-%crea las factorias y devuelve ademas el estado de la bolsa
-create_factories(0, Bag, [Bag]) :- !.
-create_factories(N, Bag, [F|Status]) :- 
+%crea las factorias y devuelve ademas el estado de la bolsa y del suelo
+%Status = [Fact1, Fact2, ..., FactN, Bag, Floor]
+create_round(0, Bag, [Bag,[]]) :- !.
+create_round(N, Bag, [F|Status]) :- 
     X is N - 1,
-    take(4, Bag, F),
-    del(4, Bag, RBag),
-    create_factories(X, RBag, Status).
+    random_permutation(Bag, OBag),
+    take(4, OBag, F),
+    del(4, OBag, RBag),
+    create_round(X, RBag, Status).
 
 %ejecuta el juego ronda por ronda
 start_round(Bag, Players, Fact, Round) :- 
     
-    create_factories(Fact, Bag, Status),
+    %crea las factorias extrayendo de la bolsa para empezar la ronda
+    create_round(Fact, Bag, Status),
+    
     take(Fact, Status, Factories),
+    del(Fact, Status, BFStatus),
 
+    %imprime el estado de la partida
     print_round(Round),
     print_status(Players, Factories),
-
-    %RPlayers = [[[],[[2:1,3:1,4:1,5:1,6:0],[]],[],15],[[],[[2:1,3:1,4:1,5:1,6:0],[]],[],15]],
     
-    %RStatus = [Player1, Player2, ... , PlayerN, Bag]
-    play_round(Players, Status, RStatus),
+    %ejecuta una ronda dejando en RStaatus el resultado de la misma
+    %RStatus = [[Player1, Player2, ... , PlayerN], Bag]
+    play_round(Players, Factories, BFStatus, RStatus),
     
-    length(Players, PL),
-    take(PL, RStatus, RPlayers),
-    nth0(PL, RStatus, RBag),
+    nth0(0, RStatus, RPlayers),
+    nth0(1, RStatus, RBag),
 
     Ro is Round + 1,
 
+    %espera por la interaccion del usuario para continuar
     get_single_char(_),
 
+    %chequea si la partida termina, si esto ocurre se muestra el vencedor y se termina la ejecucion,
+    %en otro caso, se continua la simulacion
     (game_over(RPlayers, RBag, Fact) -> (print_round("FINAL"), print_status(RPlayers), get_winner(RPlayers)); start_round(RBag, RPlayers, Fact, Ro)).
     
-%EMPEZAR LO MAS DIFICIL
-play_round(Players, Status, RStatus) :- !.
+%ejecuta la jugada de todos los jugadores hasta que el suelo y las factorias se queden vacias
+play_round(Players, Factories, BFStatus, RStatus) :- 
+    nth0(0, BFStatus, Bag),
+    nth0(1, BFStatus, Floor),
+    play_round(Players, Factories, Bag, Floor, RStatus).
+
+play_round(Players, Factories, Bag, Floor, RStatus) :- 
+    make_play(Players, Factories, Bag, Floor, RetStatus),
+
+    %RetStatus = [[[[],[[2:1,3:1,4:1,5:1,6:0],[]],[],15],[[],[[2:1,3:1,4:1,5:1,6:0],[]],[],15]], [[],[2]], Bag, []],
+
+    nth0(0, RetStatus, RetPlayers),
+    nth0(1, RetStatus, RetFactories),
+    nth0(2, RetStatus, RetBag),
+    nth0(3, RetStatus, RetFloor),
+    
+    %CHEQUEAR FUNCIONAMIENTO CUANDO SE IMPLEMENTE MAKE_PLAY!!!!
+    (end_round(RetFactories, RetFloor) -> RStatus = [RetPlayers,RetBag]; play_round(RetPlayers, RetFactories, RetBag, RetFloor, RStatus)).
+
+make_play(Players, Factories, Bag, Floor, RStatus) :- !.
+
+%chequea si se acabaron las losas en las factorias y en el suelo, si es asi, termina la ronda
+end_round([], []) :- !.
+end_round(Factories, Floor) :- 
+    Floor == [],
+    forall(member(X, Factories), X == []).
 
 %obtiene el mejor jugador y su puntuacion
 get_winner(Players) :- 
