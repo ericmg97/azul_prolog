@@ -13,4 +13,7 @@ replace(I, L, E, K) :-
     nth0(I, L, _, R),
     nth0(I, K, E, R).
   
-
+% retorna el maximo de una lista
+max(L, M) :- max(L, -1, M).
+max([], M, M).
+max([X|Y], M, R):- (X > M -> K = X ; K = M), max(Y, K, R).
