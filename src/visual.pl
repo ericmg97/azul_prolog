@@ -4,14 +4,12 @@ print_round(Round) :-
 
 %imprime el estado de la partida
 print_status(Players) :-
-    length(Players, P),
-    print_players(Players, P).
+    print_players(Players).
 
 print_status(Players, Factories) :- 
     length(Factories, F),
-    length(Players, P),
     print_factories(Factories, F),
-    print_players(Players, P).
+    print_players(Players).
 
 
 %imprime el estado de las factorias
@@ -26,32 +24,20 @@ print_factories(Factories, 9) :-
     write(String), nl.
     
 %imprime el estado de los jugadores
-print_players(_, 0) :- !.
-print_players(Players, I) :- 
-    length(Players,L),
-    Pl is L - I + 1,
-
-    nth1(Pl, Players, P),
-    nth0(4, P, Id),
+print_players([]) :- !.
+print_players([[Stair, Wall, Garbage, Punt, Id]|Players]) :- 
 
     swritef(Head, '_________JUGADOR %w_________', [Id]),
     nl, write(Head), nl, nl,
 
-    nth0(0, P, Stair),
     print_stair(Stair), nl,
-
-    nth0(1, P, Wall),
     print_wall(Wall), nl,
-
-    nth0(2, P, Garbage),
     print_garbage(Garbage), nl,
-    
-    nth0(3, P, Punt),
+ 
     swritef(Foot, 'Puntuacion: %w', [Punt]),
     write(Foot), nl, nl,
     
-    X is I - 1,
-    print_players(Players, X).
+    print_players(Players).
 
 %imprime la escalera del jugador
 print_stair(Stair) :- 

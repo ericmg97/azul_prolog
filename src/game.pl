@@ -54,73 +54,67 @@ start_round(Bag, Players, Fact, Round) :-
     create_round(Fact, Bag, Status),
     
     take(Fact, Status, Factories),
-    del(Fact, Status, BFStatus),
+    del(Fact, Status, [RBag, Floor]),
 
     %imprime el estado de la partida
     print_round(Round),
     print_status(Players, Factories),
-    
-    nth0(0, BFStatus, RBag),
-    nth0(1, BFStatus, Floor),
 
     %ejecuta una ronda de movimientos de jugadores dejando el resultado en RPlayers
     play_round(Players, Factories, Floor, RPlayers),
 
     %actualiza el estado del juego
-    refresh_status(RPlayers, RBag, RBoard),
+    refresh_status(RPlayers, RBag, [RoundPlayers, RoundBag]),
 
-    nth0(0, RBoard, RoundPlayers),
-    nth0(1, RBoard, RoundBag),
-
-    Ro is Round + 1,
+    NewRound is Round + 1,
 
     %espera por la interaccion del usuario para continuar
     get_single_char(_),
 
     %chequea si la partida termina, si esto ocurre se muestra el vencedor y se termina la ejecucion,
     %en otro caso, se continua la simulacion
-    (game_over(RoundPlayers, RoundBag, Fact) -> (print_round("FINAL"), print_status(RoundPlayers), get_winner(RoundPlayers)); start_round(RoundBag, RoundPlayers, Fact, Ro)).
+    (game_over(RoundPlayers, RoundBag, Fact) -> (print_round("FINAL"), print_status(RoundPlayers), get_winner(RoundPlayers)); start_round(RoundBag, RoundPlayers, Fact, NewRound)).
     
 %ejecuta la jugada de todos los jugadores hasta que el suelo y las factorias se queden vacias
 play_round(Players, Factories, Floor, RPlayers) :- 
-    make_all_play(Players, Factories, Floor, RetStatus),
-
-    nth0(0, RetStatus, RetPlayers),
-    nth0(1, RetStatus, RetFactories),
-    nth0(2, RetStatus, RetFloor),
+    make_all_play(Players, Factories, Floor, [NewPlayers, NewFactories, NewFloor]),
     
-    (end_round(RetFactories, RetFloor) -> RPlayers = FPlayers; play_round(FPlayers, RetFactories, RetFloor, RPlayers)).
+    (end_round(NewFactories, NewFloor) -> RPlayers = NewPlayers; play_round(NewPlayers, NewFactories, NewFloor, RPlayers)).
 
 %ejecuta un movimiento por jugador
-make_all_play(_, 0, _, _, _) :- !.
 make_all_play(Players, Factories, Floor, RStatus) :- length(Players, L), make_all_play(Players, L, Factories, Floor, RStatus).
+
+make_all_play(Players, 0, Factories, Floor, RStatus) :- RStatus = [Players, Factories, Floor], !.
 make_all_play(Players, PL, Factories, Floor, RStatus) :- 
     length(Players, L),
     P is L - PL + 1,
-    I is PL - 1,
 
     nth1(P, Players, Player),
 
-    player_move(Player, Factories, Floor, RetStatus),
+    %el jugador player, realiza un movimiento y Neworna el estado de su tablero, de las factorias y del suelo
+    player_move(Player, Factories, Floor, [NewPlayer, NewFactories, NewFloor]),
 
-    nth0(0, RetStatus, RetPlayer),
-    nth0(1, RetStatus, RetFactories),
-    nth0(2, RetStatus, RetFloor),
+    %actualiza en la lista de jugadores, el tablero del jugador que jugó 
+    replace(P, Players, NewPlayer, NewPlayers),
 
-    replace(P, Players, Player, RetPlayers),
-    replace(0, RetStatus, RetPlayers, FinalStatus),
-
-    make_all_play(Players, I, RetFactories, RetFloor, FinalStatus).
+    I is PL - 1,
+    make_all_play(NewPlayers, I, NewFactories, NewFloor, RStatus).
 
 %actualiza el estado del tablero, incluyendo: 
 %-escaleras, paredes y puntuaciones de los jugadores
 %-orden de los jugadores para la siguiente ronda
 %-fichas sobrantes de la ronda puestas en la bolsa
-refresh_status(Players, Bag, RBoard) :- !.
+refresh_status(Players, Bag, RBoard) :- 
+    length(Players, P),
+    check_first(Players, P, Player),
+    shift(Players, Player, OPlayers)
+    %refresh_board(OPlayers, Bag, [Board|Bag])
+
+    .
 
 % retorna el jugador que escogio la ficha FIRST
 check_first(Players, FPlayer) :- length(Players, P), check_first(Players, P, FPlayer).
-check_first([P|Players], 0, FPlayer) :- nth0(4, P, Id), FPlayer = Id, !.
+check_first([P|_], 0, FPlayer) :- nth0(4, P, Id), FPlayer = Id, !.
 check_first(Players, P, FPlayer):-
     length(Players, L),
     Actual is L - P,
