@@ -31,10 +31,11 @@ print_players(Players, I) :-
     length(Players,L),
     Pl is L - I + 1,
 
-    swritef(Head, '_________JUGADOR %w_________', [Pl]),
-    nl, write(Head), nl, nl,
-
     nth1(Pl, Players, P),
+    nth0(4, P, Id),
+
+    swritef(Head, '_________JUGADOR %w_________', [Id]),
+    nl, write(Head), nl, nl,
 
     nth0(0, P, Stair),
     print_stair(Stair), nl,

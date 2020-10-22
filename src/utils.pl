@@ -17,3 +17,9 @@ replace(I, L, E, K) :-
 max(L, M) :- max(L, -1, M).
 max([], M, M).
 max([X|Y], M, R):- (X > M -> K = X ; K = M), max(Y, K, R).
+
+% corre los elementos de la lista L1, N veces hacia la izquierda
+shift(L1, N, L2) :- 
+    append(Lx, Ly, L1), % L1 is Lx || Ly
+    append(Ly, Lx, L2), % L2 is Ly || Lx
+    length(Lx, N).      % The length of Lx is N

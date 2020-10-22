@@ -1,10 +1,10 @@
 :- [utils, visual].
-:- dynamic print_winners/2, print_winners/2, print_status/1, max/2, print_winners/1, print_round/1, print_status/2, replace/4, del/3, take/3.
+:- dynamic shift/3, print_winners/2, print_winners/2, print_status/1, max/2, print_winners/1, print_round/1, print_status/2, replace/4, del/3, take/3.
 
 %iniciar la partida dependiendo de la cantidad de jugadores
-play(2) :- create_bag(Bag), board(B1), board(B2), start_round(Bag, [B1, B2], 5, 0).
-play(3) :- create_bag(Bag), board(B1), board(B2), board(B3), start_round(Bag, [B1, B2, B3], 7, 0).
-play(4) :- create_bag(Bag), board(B1), board(B2), board(B3), board(B4), start_round(Bag, [B1, B2, B3, B4], 9, 0).
+play(2) :- create_bag(Bag), board(1, B1), board(2, B2), start_round(Bag, [B1, B2], 5, 0).
+play(3) :- create_bag(Bag), board(1, B1), board(2, B2), board(3, B3), start_round(Bag, [B1, B2, B3], 7, 0).
+play(4) :- create_bag(Bag), board(1, B1), board(2, B2), board(3, B3), board(4, B4), start_round(Bag, [B1, B2, B3, B4], 9, 0).
 play(_) :- write("La cantidad de jugadores debe ser: 2, 3 o 4.").
 
 
@@ -18,7 +18,7 @@ create_bag(X, [Y,Bag]):-
     create_bag(Z, Bag).
 
 %crear el tablero de los jugadores (escalera, pared, basura, puntuacion)
-board(B) :- stair(S), wall(W), garbage(G), B = [S, W, G, 0].
+board(Id, B) :- stair(S), wall(W), garbage(G), B = [S, W, G, 0, Id].
 
 %crear escalera de jugador
 stair(X):- X = [[0],
@@ -39,7 +39,7 @@ garbage(X):- X = [-1:0, -1:0, -2:0, -2:0, -2:0, -3:0, -3:0].
 
 %crea las factorias y devuelve ademas el estado de la bolsa y del suelo
 %Status = [Fact1, Fact2, ..., FactN, Bag, Floor]
-create_round(0, Bag, [Bag,[]]) :- !.
+create_round(0, Bag, [Bag,[-1]]) :- !.
 create_round(N, Bag, [F|Status]) :- 
     X is N - 1,
     random_permutation(Bag, OBag),
@@ -60,12 +60,17 @@ start_round(Bag, Players, Fact, Round) :-
     print_round(Round),
     print_status(Players, Factories),
     
-    %ejecuta una ronda dejando en RStaatus el resultado de la misma
-    %RStatus = [[Player1, Player2, ... , PlayerN], Bag]
-    play_round(Players, Factories, BFStatus, RStatus),
-    
-    nth0(0, RStatus, RPlayers),
-    nth0(1, RStatus, RBag),
+    nth0(0, BFStatus, RBag),
+    nth0(1, BFStatus, Floor),
+
+    %ejecuta una ronda de movimientos de jugadores dejando el resultado en RPlayers
+    play_round(Players, Factories, Floor, RPlayers),
+
+    %actualiza el estado del juego
+    refresh_status(RPlayers, RBag, RBoard),
+
+    nth0(0, RBoard, RoundPlayers),
+    nth0(1, RBoard, RoundBag),
 
     Ro is Round + 1,
 
@@ -74,28 +79,63 @@ start_round(Bag, Players, Fact, Round) :-
 
     %chequea si la partida termina, si esto ocurre se muestra el vencedor y se termina la ejecucion,
     %en otro caso, se continua la simulacion
-    (game_over(RPlayers, RBag, Fact) -> (print_round("FINAL"), print_status(RPlayers), get_winner(RPlayers)); start_round(RBag, RPlayers, Fact, Ro)).
+    (game_over(RoundPlayers, RoundBag, Fact) -> (print_round("FINAL"), print_status(RoundPlayers), get_winner(RoundPlayers)); start_round(RoundBag, RoundPlayers, Fact, Ro)).
     
 %ejecuta la jugada de todos los jugadores hasta que el suelo y las factorias se queden vacias
-play_round(Players, Factories, BFStatus, RStatus) :- 
-    nth0(0, BFStatus, Bag),
-    nth0(1, BFStatus, Floor),
-    play_round(Players, Factories, Bag, Floor, RStatus).
-
-play_round(Players, Factories, Bag, Floor, RStatus) :- 
-    make_play(Players, Factories, Bag, Floor, RetStatus),
-
-    %RetStatus = [[[[],[[2:1,3:1,4:1,5:1,6:0],[]],[],15],[[],[[2:1,3:1,4:1,5:1,6:0],[]],[],15]], [[],[2]], Bag, []],
+play_round(Players, Factories, Floor, RPlayers) :- 
+    make_all_play(Players, Factories, Floor, RetStatus),
 
     nth0(0, RetStatus, RetPlayers),
     nth0(1, RetStatus, RetFactories),
-    nth0(2, RetStatus, RetBag),
-    nth0(3, RetStatus, RetFloor),
+    nth0(2, RetStatus, RetFloor),
     
-    %CHEQUEAR FUNCIONAMIENTO CUANDO SE IMPLEMENTE MAKE_PLAY!!!!
-    (end_round(RetFactories, RetFloor) -> RStatus = [RetPlayers,RetBag]; play_round(RetPlayers, RetFactories, RetBag, RetFloor, RStatus)).
+    (end_round(RetFactories, RetFloor) -> RPlayers = FPlayers; play_round(FPlayers, RetFactories, RetFloor, RPlayers)).
 
-make_play(Players, Factories, Bag, Floor, RStatus) :- !.
+%ejecuta un movimiento por jugador
+make_all_play(_, 0, _, _, _) :- !.
+make_all_play(Players, Factories, Floor, RStatus) :- length(Players, L), make_all_play(Players, L, Factories, Floor, RStatus).
+make_all_play(Players, PL, Factories, Floor, RStatus) :- 
+    length(Players, L),
+    P is L - PL + 1,
+    I is PL - 1,
+
+    nth1(P, Players, Player),
+
+    player_move(Player, Factories, Floor, RetStatus),
+
+    nth0(0, RetStatus, RetPlayer),
+    nth0(1, RetStatus, RetFactories),
+    nth0(2, RetStatus, RetFloor),
+
+    replace(P, Players, Player, RetPlayers),
+    replace(0, RetStatus, RetPlayers, FinalStatus),
+
+    make_all_play(Players, I, RetFactories, RetFloor, FinalStatus).
+
+%actualiza el estado del tablero, incluyendo: 
+%-escaleras, paredes y puntuaciones de los jugadores
+%-orden de los jugadores para la siguiente ronda
+%-fichas sobrantes de la ronda puestas en la bolsa
+refresh_status(Players, Bag, RBoard) :- !.
+
+% retorna el jugador que escogio la ficha FIRST
+check_first(Players, FPlayer) :- length(Players, P), check_first(Players, P, FPlayer).
+check_first([P|Players], 0, FPlayer) :- nth0(4, P, Id), FPlayer = Id, !.
+check_first(Players, P, FPlayer):-
+    length(Players, L),
+    Actual is L - P,
+
+    nth0(Actual, Players, Player),
+    nth0(2, Player, Garbage),
+    nth0(4, Player, Id),
+
+    I is P - 1,
+
+    (member(_:-1, Garbage) -> FPlayer = Id; check_first(Players, I, FPlayer)).
+
+
+%rellena la bolsa con las fichas que sobraron de las escaleras de los jugadores y en sus basuras
+refill_bag(Players, Bag, RBag) :- !.
 
 %chequea si se acabaron las losas en las factorias y en el suelo, si es asi, termina la ronda
 end_round([], []) :- !.
@@ -116,9 +156,11 @@ get_winner(Players, Actual, Best, Winners) :-
     nth1(NActual, Players, Player),
     nth0(3, Player, Punctuation),
     max([Best, Punctuation], NewBest),
- 
-    (Punctuation == Best ->  append(Winners, [NActual], NewWinners);
-    (Punctuation == NewBest -> NewWinners = [NActual]; NewWinners = Winners)),
+    
+    nth0(4, Player, Id),
+
+    (Punctuation == Best ->  append(Winners, [Id], NewWinners);
+    (Punctuation == NewBest -> NewWinners = [Id]; NewWinners = Winners)),
 
     Act is Actual - 1,
     get_winner(Players, Act, NewBest, NewWinners).
@@ -134,3 +176,8 @@ game_over_players([]) :- false, !.
 game_over_players([P | Players]) :-
     nth0(1, P, Wall),
     (member([_:1, _:1, _:1, _:1, _:1], Wall) -> !; game_over_players(Players)).
+
+
+
+%TESTER
+%RetStatus = [[[[],[[2:1,3:1,4:1,5:1,6:0],[]],[],15],[[],[[2:1,3:1,4:1,5:1,6:0],[]],[],15]], [[],[2]], Bag, []],
