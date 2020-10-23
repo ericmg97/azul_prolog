@@ -1,5 +1,5 @@
 :- [utils, visual].
-:- dynamic shift/3, print_winners/2, print_winners/2, print_status/1, max/2, print_winners/1, print_round/1, print_status/2, replace/4, del/3, take/3.
+:- dynamic indexOf/3, shift/3, print_winners/2, print_winners/2, print_status/1, max/2, print_winners/1, print_round/1, print_status/2, replace/4, del/3, take/3.
 
 %iniciar la partida dependiendo de la cantidad de jugadores
 play(2) :- create_bag(Bag), board(1, B1), board(2, B2), start_round(Bag, [B1, B2], 5, 0).
@@ -64,7 +64,7 @@ start_round(Bag, Players, Fact, Round) :-
     play_round(Players, Factories, Floor, RPlayers),
 
     %actualiza el estado del juego
-    refresh_status(RPlayers, RBag, [RoundPlayers, RoundBag]),
+    refresh_status(RPlayers, RBag, [NewPlayers, NewBag]),
 
     NewRound is Round + 1,
 
@@ -73,7 +73,7 @@ start_round(Bag, Players, Fact, Round) :-
 
     %chequea si la partida termina, si esto ocurre se muestra el vencedor y se termina la ejecucion,
     %en otro caso, se continua la simulacion
-    (game_over(RoundPlayers, RoundBag, Fact) -> (print_round("FINAL"), print_status(RoundPlayers), get_winner(RoundPlayers)); start_round(RoundBag, RoundPlayers, Fact, NewRound)).
+    (game_over(NewPlayers, NewBag, Fact) -> (print_round("FINAL"), print_status(NewPlayers), get_winner(NewPlayers)); start_round(NewBag, NewPlayers, Fact, NewRound)).
     
 %ejecuta la jugada de todos los jugadores hasta que el suelo y las factorias se queden vacias
 play_round(Players, Factories, Floor, RPlayers) :- 
@@ -82,23 +82,23 @@ play_round(Players, Factories, Floor, RPlayers) :-
     (end_round(NewFactories, NewFloor) -> RPlayers = NewPlayers; play_round(NewPlayers, NewFactories, NewFloor, RPlayers)).
 
 %ejecuta un movimiento por jugador
-make_all_play(Players, Factories, Floor, RStatus) :- length(Players, L), make_all_play(Players, L, Factories, Floor, RStatus).
+make_all_play(Players, Factories, Floor, Status) :- length(Players, L), make_all_play(Players, L, Factories, Floor, Status).
 
-make_all_play(Players, 0, Factories, Floor, RStatus) :- RStatus = [Players, Factories, Floor], !.
-make_all_play(Players, PL, Factories, Floor, RStatus) :- 
+make_all_play(Players, 0, Factories, Floor, Status) :- Status = [Players, Factories, Floor], !.
+make_all_play(Players, PL, Factories, Floor, Status) :- 
     length(Players, L),
     P is L - PL + 1,
 
     nth1(P, Players, Player),
 
-    %el jugador player, realiza un movimiento y Neworna el estado de su tablero, de las factorias y del suelo
+    %el jugador player, realiza un movimiento y retorna el estado de su tablero, de las factorias y del suelo
     player_move(Player, Factories, Floor, [NewPlayer, NewFactories, NewFloor]),
 
     %actualiza en la lista de jugadores, el tablero del jugador que jugó 
     replace(P, Players, NewPlayer, NewPlayers),
 
     I is PL - 1,
-    make_all_play(NewPlayers, I, NewFactories, NewFloor, RStatus).
+    make_all_play(NewPlayers, I, NewFactories, NewFloor, Status).
 
 %actualiza el estado del tablero, incluyendo: 
 %-escaleras, paredes y puntuaciones de los jugadores
@@ -107,10 +107,14 @@ make_all_play(Players, PL, Factories, Floor, RStatus) :-
 refresh_status(Players, Bag, RBoard) :- 
     length(Players, P),
     check_first(Players, P, Player),
-    shift(Players, Player, OPlayers)
-    %refresh_board(OPlayers, Bag, [Board|Bag])
+    shift(Players, Player, OrderedPlayers),
 
-    .
+    refresh_boards(OrderedPlayers, [NewPlayers, RBag]),
+    
+    %rellena la bolsa con las fichas que sobraron de las escaleras de los jugadores y en sus basuras
+    append(Bag, RBag, NewBag),
+
+    RBoard = [NewPlayers, NewBag].
 
 % retorna el jugador que escogio la ficha FIRST
 check_first(Players, FPlayer) :- length(Players, P), check_first(Players, P, FPlayer).
@@ -127,9 +131,66 @@ check_first(Players, P, FPlayer):-
 
     (member(_:-1, Garbage) -> FPlayer = Id; check_first(Players, I, FPlayer)).
 
+%actualiza el estado de los tableros de los jugadores luego de una ronda
+refresh_boards(Players, Status) :- length(Players, P), refresh_boards(Players, P, [], Status).
+refresh_boards(Players, 0, Trash, Status) :- Status = [Players, Trash].
+refresh_boards(Players, P, Trash, Status) :- 
+    nth1(P, Players, Player),
+    take(2, Player, StairWall),
+    del(2, Player, TempPlayer),
+    
+    refresh_stairwall(StairWall, [NewStairWall, SWTrash]),
+    append(NewStairWall, TempPlayer, SWPlayer),
+    
+    calc_punctuation(SWPlayer, Punctuation),
 
-%rellena la bolsa con las fichas que sobraron de las escaleras de los jugadores y en sus basuras
-refill_bag(Players, Bag, RBag) :- !.
+    take_garbage(SWPlayer, [Garbage, GTrash]),
+    
+    append(SWTrash, GTrash, NewTrash),
+
+    append(NewStairWall, [Garbage, Punctuation, Id], NewPlayer),
+    
+    replace(P, Players, NewPlayer, NewPlayers),
+
+    I is P - 1,
+    refresh_boards(NewPlayers, I, NewTrash, Status).
+
+%CALCULAR LA PUNTUACION DEL JUGADOR AL TERMINAR UNA RONDA
+calc_punctuation(Player, Punctuation) :- Punctuation = 0.
+
+refresh_stairwall(StairWall, NewStWall) :- refresh_row(StairWall, 4, [], NewStWall).
+refresh_row([Stair, Wall], 0, Trash, NewStWall) :- NewStWall = [[Stair, Wall], Trash], !.
+refresh_row([Stair, Wall], Row, Trash, NewStWall):-  
+    nth0(Row, Stair, RowS),
+    nth0(Row, Wall, RowW),
+    findall(X,(member(X, RowS), X \= 0), Slabes),
+    length(Stair, LS),
+    
+    (Slabes == LS -> 
+        (nth0(0, RowS, Color), 
+        indexOf(RowW, Color, Index),
+        del(1, Slabes, Trs),
+        findall(0, between(1, LS, _), NewRowS),
+        replace(Index, RowW, Color:1, NewRowW),
+        append(Trash, Trs, NewTrash),
+        replace(Row, Stair, NewRowS, NewStair),
+        replace(Row, Wall, NewRowW, NewWall));
+        NewWall = Wall,
+        NewStair = Stair,
+        NewTrash = Trash
+        ),
+    
+    NewR is Row - 1,
+    refresh_row([NewStair, NewWall], NewR, NewTrash, NewStWall).
+    
+%actualiza el estado de la basura de un jugador luego de haber jugado una ronda
+take_garbage(Player, Status) :-
+    nth0(2, Player, Garbage),
+    findall(X, (member(X, Garbage), X \= (_:0)), Slabs),
+    findall(X, member((_:X), Slabs), Trash),
+    garbage(Garbage),
+    Status = [Garbage, Trash].
+
 
 %chequea si se acabaron las losas en las factorias y en el suelo, si es asi, termina la ronda
 end_round([], []) :- !.

@@ -8,7 +8,7 @@ take(N, [X|Y], [X|W]):-
 % elimina los N primeros elementos de la lista
 del(N, X, Y) :- length(Z, N), append(Z, Y, X).
 
-%reemplaza el elemento I de la lista L por E
+%reemplaza el elemento I esimo de la lista L por E
 replace(I, L, E, K) :-
     nth0(I, L, _, R),
     nth0(I, K, E, R).
@@ -23,3 +23,10 @@ shift(L1, N, L2) :-
     append(Lx, Ly, L1), % L1 is Lx || Ly
     append(Ly, Lx, L2), % L2 is Ly || Lx
     length(Lx, N).      % The length of Lx is N
+
+% retorna el indice del elemento Element de una lista
+indexOf([Element|_], Element, 0):- !.
+indexOf([_|Tail], Element, Index):-
+    indexOf(Tail, Element, Index1),
+    !,
+    Index is Index1+1.
