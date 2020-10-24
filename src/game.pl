@@ -146,6 +146,7 @@ refresh_boards(Players, P, Trash, Status) :-
     I is P - 1,
     refresh_boards(NewPlayers, I, FinalTrash, Status).
 
+%actualiza el estado del tablero del jugador al finalizar la ronda y retorna ademas las losas descartadas
 refresh_player_board([Stair, Wall, Garbage, Punc, Id], [NewPlayer, Trash]) :- 
     refresh_rows([Stair, Wall], Punc, 4, [], [[NewStair, NewWall], FirstPunc, FirstTrash]),  
 
@@ -295,8 +296,3 @@ game_over_players([]) :- false, !.
 game_over_players([P | Players]) :-
     nth0(1, P, Wall),
     (member([_:1, _:1, _:1, _:1, _:1], Wall) -> !; game_over_players(Players)).
-
-
-
-%TESTER
-%RetStatus = [[[[],[[2:1,3:1,4:1,5:1,6:0],[]],[],15],[[],[[2:1,3:1,4:1,5:1,6:0],[]],[],15]], [[],[2]], Bag, []],
