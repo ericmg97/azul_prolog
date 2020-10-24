@@ -30,3 +30,8 @@ indexOf([_|Tail], Element, Index):-
     indexOf(Tail, Element, Index1),
     !,
     Index is Index1+1.
+
+% para el trabajo con matrices
+matrix(Matrix, I, J, Value) :-
+    nth0(I, Matrix, Row),
+    nth0(J, Row, Value).

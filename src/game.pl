@@ -1,5 +1,5 @@
 :- [utils, visual].
-:- dynamic indexOf/3, shift/3, print_winners/2, print_winners/2, print_status/1, max/2, print_winners/1, print_round/1, print_status/2, replace/4, del/3, take/3.
+:- dynamic matrix/4, indexOf/3, shift/3, print_winners/2, print_winners/2, print_status/1, max/2, print_winners/1, print_round/1, print_status/2, replace/4, del/3, take/3.
 
 %iniciar la partida dependiendo de la cantidad de jugadores
 play(2) :- create_bag(Bag), board(1, B1), board(2, B2), start_round(Bag, [B1, B2], 5, 0).
@@ -109,10 +109,10 @@ refresh_status(Players, Bag, RBoard) :-
     check_first(Players, P, Player),
     shift(Players, Player, OrderedPlayers),
 
-    refresh_boards(OrderedPlayers, [NewPlayers, RBag]),
+    refresh_boards(OrderedPlayers, [NewPlayers, Trash]),
     
     %rellena la bolsa con las fichas que sobraron de las escaleras de los jugadores y en sus basuras
-    append(Bag, RBag, NewBag),
+    append(Bag, Trash, NewBag),
 
     RBoard = [NewPlayers, NewBag].
 
@@ -136,31 +136,32 @@ refresh_boards(Players, Status) :- length(Players, P), refresh_boards(Players, P
 refresh_boards(Players, 0, Trash, Status) :- Status = [Players, Trash].
 refresh_boards(Players, P, Trash, Status) :- 
     nth1(P, Players, Player),
-    take(2, Player, StairWall),
-    del(2, Player, TempPlayer),
-    
-    refresh_stairwall(StairWall, [NewStairWall, SWTrash]),
-    append(NewStairWall, TempPlayer, SWPlayer),
-    
-    calc_punctuation(SWPlayer, Punctuation),
 
-    take_garbage(SWPlayer, [Garbage, GTrash]),
-    
-    append(SWTrash, GTrash, NewTrash),
-
-    append(NewStairWall, [Garbage, Punctuation, Id], NewPlayer),
+    refresh_player_board(Player, [NewPlayer, NewTrash]),
     
     replace(P, Players, NewPlayer, NewPlayers),
+    
+    append(Trash, NewTrash, FinalTrash),
 
     I is P - 1,
-    refresh_boards(NewPlayers, I, NewTrash, Status).
+    refresh_boards(NewPlayers, I, FinalTrash, Status).
 
-%CALCULAR LA PUNTUACION DEL JUGADOR AL TERMINAR UNA RONDA
-calc_punctuation(Player, Punctuation) :- Punctuation = 0.
+refresh_player_board([Stair, Wall, Garbage, Punc, Id], [NewPlayer, Trash]) :- 
+    refresh_rows([Stair, Wall], Punctuation, 4, [], [[NewStair, NewWall], FirstPunc, FirstTrash]),  
 
-refresh_stairwall(StairWall, NewStWall) :- refresh_row(StairWall, 4, [], NewStWall).
-refresh_row([Stair, Wall], 0, Trash, NewStWall) :- NewStWall = [[Stair, Wall], Trash], !.
-refresh_row([Stair, Wall], Row, Trash, NewStWall):-  
+    take_garbage(Garbage, [NewGarbage, GTrash]),
+
+    length(Trash, LT),
+    (LT < 3 -> NewPunc is FirstPunc - Lt;
+        (LT < 6 -> (NewPunc is FirstPunc - 2 - ((LT - 2)*2));
+            (LT < 9 -> (NewPunc is FirstPunc - 8 - ((LT - 5)*3));
+                NewPunc is FirstPunc - 12))),
+    
+    append(FirstTrash, GTrash, Trash),
+    NewPlayer = [NewStair, NewWall, NewGarbage, NewPunc, Id].
+
+refresh_rows([Stair, Wall], Punctuation, 0, Trash, NewStWall) :- NewStWall = [[Stair, Wall], Punctuation, Trash], !.
+refresh_rows([Stair, Wall], Punctuation, Row, Trash, NewStWall):-  
     nth0(Row, Stair, RowS),
     nth0(Row, Wall, RowW),
     findall(X,(member(X, RowS), X \= 0), Slabes),
@@ -169,20 +170,82 @@ refresh_row([Stair, Wall], Row, Trash, NewStWall):-
     (Slabes == LS -> 
         (nth0(0, RowS, Color), 
         indexOf(RowW, Color, Index),
-        del(1, Slabes, Trs),
-        findall(0, between(1, LS, _), NewRowS),
         replace(Index, RowW, Color:1, NewRowW),
+
+        calc_punctuation(Wall, [Row, Index], NewPunctuation),
+
+        del(1, Slabes, Trs),
+        findall(0, between(1, LS, _), NewRowS),  
+
         append(Trash, Trs, NewTrash),
+
         replace(Row, Stair, NewRowS, NewStair),
         replace(Row, Wall, NewRowW, NewWall));
-        NewWall = Wall,
+
+        (NewWall = Wall,
         NewStair = Stair,
-        NewTrash = Trash
+        NewPunctuation = Punctuation,
+        NewTrash = Trash)
         ),
     
     NewR is Row - 1,
-    refresh_row([NewStair, NewWall], NewR, NewTrash, NewStWall).
+    refresh_rows([NewStair, NewWall], NewPunctuation, NewR, NewTrash, NewStWall).
     
+%calcular la puntuacion al poner una ficha
+calc_punctuation(Wall, [Row, Col], Punctuation) :- 
+    matrix(Wall, Row, Col, Value),
+
+    nth0(Row, Wall, WorkRow),
+    findall(Value, matrix(Wall, _, Col, Value), WorkColumn),
+
+    nth0(0, Wall, Row0),
+    nth0(1, Wall, Row1),
+    nth0(2, Wall, Row2),
+    nth0(3, Wall, Row3),
+    nth0(4, Wall, Row4),
+
+    %cuenta la cantidad de azulejos contiguos hacia arriba
+    check_minus(WorkColumn, Row, CountUp),
+    %cuenta la cantidad de azulejos contiguos hacia abajo
+    check_sum(WorkColumn, Row, CountDown),
+    %cuenta la cantidad de azulejos contiguos hacia la izquierda
+    check_minus(WorkRow, Col, CountLeft),
+    %cuenta la cantidad de azulejos contiguos hacia la derecha
+    check_sum(WorkRow, Col, CountRight),
+
+    %chequea si se completo una fila y si esto ocurre, suma la bonificacion de 2 puntos
+    (forall(member((_:X), WorkRow), X == 1) -> BonusRow = 2; BonusRow = 0),
+    
+    %chequea si se completo una columna y si esto ocurre, suma la bonificacion de 7 puntos
+    (forall(member((_:X), WorkColumn), X == 1) -> BonusCol = 7; BonusCol = 0),
+
+    %chequea si se completo una color en el tablero y si esto ocurre, suma la bonificacion de 10 puntos
+    ((member(Value, Row0), 
+    member(Value, Row1), 
+    member(Value, Row2),
+    member(Value, Row3),
+    member(Value, Row4) -> (BonusColor = 10); BonusColor = 0)),
+
+    %suma todos los puntos acumulados mas el punto de colocacion de la ficha
+    Punctuation is CountUp + CountDown + CountLeft + CountRight + BonusRow + BonusCol + BonusColor + 1.
+
+%chequea la cantidad de losas contiguas en una lista hacia la izquierda
+check_minus(List, Position, Count) :- check_minus(List, Position, 0, Count).
+
+check_minus(_, 0, C, Count) :- Count = C.
+check_minus(List, Position, C, Count) :- 
+    NewPosition is Position - 1,
+    (nth0(NewPosition, List, Element), member((_:1), [Element] )) -> (NewC is C + 1, check_minus(List, NewPosition, NewC, Count)); Count = C, !.
+
+%chequea la cantidad de losas contiguas en una lista hacia la derecha
+check_sum(List, Position, Count) :- length(List, L), check_sum(List, Position, L, 0, Count).
+
+check_sum(_, L, L, C, Count) :- Count = C.
+check_sum(List, Position, L, C, Count) :- 
+    NewPosition is Position + 1,
+    (nth0(NewPosition, List, Element), member((_:1), [Element] )) -> (NewC is C + 1, check_sum(List, NewPosition, L, NewC, Count)); Count = C, !.
+
+
 %actualiza el estado de la basura de un jugador luego de haber jugado una ronda
 take_garbage(Player, Status) :-
     nth0(2, Player, Garbage),
