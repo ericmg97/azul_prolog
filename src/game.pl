@@ -147,12 +147,12 @@ refresh_boards(Players, P, Trash, Status) :-
     refresh_boards(NewPlayers, I, FinalTrash, Status).
 
 refresh_player_board([Stair, Wall, Garbage, Punc, Id], [NewPlayer, Trash]) :- 
-    refresh_rows([Stair, Wall], Punctuation, 4, [], [[NewStair, NewWall], FirstPunc, FirstTrash]),  
+    refresh_rows([Stair, Wall], Punc, 4, [], [[NewStair, NewWall], FirstPunc, FirstTrash]),  
 
     take_garbage(Garbage, [NewGarbage, GTrash]),
 
     length(Trash, LT),
-    (LT < 3 -> NewPunc is FirstPunc - Lt;
+    (LT < 3 -> NewPunc is FirstPunc - LT;
         (LT < 6 -> (NewPunc is FirstPunc - 2 - ((LT - 2)*2));
             (LT < 9 -> (NewPunc is FirstPunc - 8 - ((LT - 5)*3));
                 NewPunc is FirstPunc - 12))),
@@ -172,7 +172,8 @@ refresh_rows([Stair, Wall], Punctuation, Row, Trash, NewStWall):-
         indexOf(RowW, Color, Index),
         replace(Index, RowW, Color:1, NewRowW),
 
-        calc_punctuation(Wall, [Row, Index], NewPunctuation),
+        calc_punctuation(Wall, [Row, Index], NPunctuation),
+        NewPunctuation is Punctuation + NPunctuation,
 
         del(1, Slabes, Trs),
         findall(0, between(1, LS, _), NewRowS),  
