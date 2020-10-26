@@ -1,5 +1,5 @@
 :- [utils, visual].
-:- dynamic matrix/4, indexOf/3, shift/3, print_winners/2, print_winners/2, print_status/1, max/2, print_winners/1, print_round/1, print_status/2, replace/4, del/3, take/3.
+:- dynamic max_repeated/2, matrix/4, indexOf/3, shift/3, print_winners/2, print_winners/2, print_status/1, print_winners/1, print_round/1, print_status/2, replace/4, del/3, take/3.
 
 %iniciar la partida dependiendo de la cantidad de jugadores
 play(2) :- create_bag(Bag), board(1, B1), board(2, B2), start_round(Bag, [B1, B2], 5, 0).
@@ -61,7 +61,12 @@ start_round(Bag, Players, Fact, Round) :-
     print_status(Players, Factories),
 
     %ejecuta una ronda de movimientos de jugadores dejando el resultado en RPlayers
-    play_round(Players, Factories, Floor, RPlayers),
+    play_round(Players, Floor, Factories, RPlayers),
+
+    print_status(RPlayers),
+
+    %espera por la interaccion del usuario para continuar
+    get_single_char(_),
 
     %actualiza el estado del juego
     refresh_status(RPlayers, RBag, [NewPlayers, NewBag]),
@@ -76,29 +81,122 @@ start_round(Bag, Players, Fact, Round) :-
     (game_over(NewPlayers, NewBag, Fact) -> (print_round("FINAL"), print_status(NewPlayers), get_winner(NewPlayers)); start_round(NewBag, NewPlayers, Fact, NewRound)).
     
 %ejecuta la jugada de todos los jugadores hasta que el suelo y las factorias se queden vacias
-play_round(Players, Factories, Floor, RPlayers) :- 
-    make_all_play(Players, Factories, Floor, [NewPlayers, NewFactories, NewFloor]),
+play_round(Players, Floor, Factories, RPlayers) :- 
+    make_all_play(Players, Floor, Factories, [NewPlayers, NewFactories, NewFloor]),
     
-    (end_round(NewFactories, NewFloor) -> RPlayers = NewPlayers; play_round(NewPlayers, NewFactories, NewFloor, RPlayers)).
+    (end_round(NewFactories, NewFloor) -> RPlayers = NewPlayers; play_round(NewPlayers, NewFloor, NewFactories, RPlayers)).
 
 %ejecuta un movimiento por jugador
-make_all_play(Players, Factories, Floor, Status) :- length(Players, L), make_all_play(Players, L, Factories, Floor, Status).
+make_all_play(Players, Floor, Factories, Status) :- length(Players, L), make_all_play(Players, L, Factories, Floor, Status).
 
-make_all_play(Players, 0, Factories, Floor, Status) :- Status = [Players, Factories, Floor], !.
-make_all_play(Players, PL, Factories, Floor, Status) :- 
+make_all_play(Players, 0, Floor, Factories, Status) :- Status = [Players, Factories, Floor], !.
+make_all_play(Players, PL, Floor, Factories, Status) :- 
     length(Players, L),
     P is L - PL + 1,
 
     nth1(P, Players, Player),
 
     %el jugador player, realiza un movimiento y retorna el estado de su tablero, de las factorias y del suelo
-    player_move(Player, Factories, Floor, [NewPlayer, NewFactories, NewFloor]),
+    player_move(Player, Floor, Factories, [NewPlayer, NewFactories, NewFloor]),
 
     %actualiza en la lista de jugadores, el tablero del jugador que jugó 
     replace(P, Players, NewPlayer, NewPlayers),
 
     I is PL - 1,
-    make_all_play(NewPlayers, I, NewFactories, NewFloor, Status).
+    make_all_play(NewPlayers, I, NewFloor, NewFactories, Status).
+
+%ejecuta un movimiento de un jugador con la estrategia dada 
+player_move(Player, Floor, Factories, [NewPlayer, NewFactories, NewFloor]) :- 
+    append([Floor], Factories, Places),
+
+    take_random_more(Places, [Taken, NewFactories, NewFloor]),
+    put_best_row(Player, Taken, NewPlayer).
+
+take_random_more(Places, [Taken, NewFactories, NewFloor]) :-
+    length(Places, LP),
+    random_between(1, LP, R),
+    nth1(R, Places, Place),
+
+    max_repeated(Place, Color),
+    take_color(Color, Places, R, [Taken, NewFactories, NewFloor]).
+
+take_color(Color, Places, I, [Taken, NewFactories, NewFloor]) :-
+    nth0(I, Places, Place),
+    
+    findall(X,(member(X, Place), X == Color), FTaken),
+    (member(-1, Place) -> (append(FTaken, -1, Taken), delete(Place, -1, NPlace)); ( NPlace = Place, Taken = FTaken)),
+
+    del(1, Places, Factories),
+
+    (I == 0 ->  (delete(NPlace, Color, NewFloor), NewFactories = Factories); 
+                (delete(NPlace, Color, NewPlace), 
+                take(1, Places, Floor), 
+                append(Floor, NewPlace, NewFloor)),
+                Fact is I + 1,
+                replace(Fact, Factories, [], NewFactories)).
+
+put_best_row(Player, Taken, NewPlayer) :- 
+    nth0(0, Player, Stair),
+
+    nth0(0, Stair, Row0), put_taken(Taken, Row0, [NewRow0, Trash0]),
+    nth0(1, Stair, Row1), put_taken(Taken, Row1, [NewRow1, Trash1]),
+    nth0(2, Stair, Row2), put_taken(Taken, Row2, [NewRow2, Trash2]),
+    nth0(3, Stair, Row3), put_taken(Taken, Row3, [NewRow3, Trash3]),
+    nth0(4, Stair, Row4), put_taken(Taken, Row4, [NewRow4, Trash4]),
+    
+    Rows = [NewRow0, NewRow1, NewRow2, NewRow3, NewRow4],
+    Trash = [Trash0, Trash1, Trash2, Trash3, Trash4],
+
+    min_list(Trash, Min),
+    indexOf(Trash, Min, I),
+    nth0(I, Rows, NewRow),
+    
+    nth0(I, Trash, NTrash),
+    nth0(2, Player, PTrash),
+    put_trash(PTrash, NTrash, NewTrash),
+
+    replace(I, Stair, NewRow, NewStair),
+    replace(0, Player, NewStair, SPlayer),
+    replace(2, SPlayer, NewTrash, NewPlayer).
+
+put_taken(Taken, Row, [NewRow, Trash]) :-
+    (member(-1, Taken) -> Ntrash = [-1]; Ntrash = []),
+
+    length(Row, RowL),
+
+    nth0(0, Taken, Color),
+    nth0(0, Row, RowColor),
+
+    (RowColor == 0 ; RowColor == Color),
+    
+    findall(X, (member(X, Row), X == Color), C),
+    append(C, Taken, NewR),
+    length(NewR, LR),
+
+    ((LR < RowL) -> 
+        (L is RowL - 1, findall(0, between(LR, L, _), Rest), append(NewR, Rest, NewRow), Trash = Ntrash);
+    (Diff is LR - RowL, take(Diff, NewR, DTrash), append(Ntrash, DTrash, Trash), del(Diff, NewR, NewRow))).
+
+put_trash(PlayerTrash, Add, NewTrash) :-
+    findall(Y, (member(Y, PlayerTrash), Y \= 0), Ok),
+    
+    length(Ok, LO),
+    take(LO, PlayerTrash, POk),
+    del(LO, PlayerTrash, PFree),
+
+    findall([X:Y], member(X:Y, PFree), FPFree),
+    length(FPFree, LPF),
+    take(LPF, Add, PAdd),
+    
+    format_trash(FPFree, PAdd, PRest),
+    append(POk, PRest, NewTrash).
+
+format_trash([],[],RList) :- RList = [].
+format_trash([F|Format], [L|List], [N|RList]) :- 
+    nth0(0, F, Val),
+    N = Val:L, 
+    format_trash(Format, List, RList).
+
 
 %actualiza el estado del tablero, incluyendo: 
 %-escaleras, paredes y puntuaciones de los jugadores
@@ -275,7 +373,7 @@ get_winner(Players, Actual, Best, Winners) :-
 
     nth1(NActual, Players, Player),
     nth0(3, Player, Punctuation),
-    max([Best, Punctuation], NewBest),
+    max_list([Best, Punctuation], NewBest),
     
     nth0(4, Player, Id),
 
