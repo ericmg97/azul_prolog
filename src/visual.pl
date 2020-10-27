@@ -1,6 +1,6 @@
 %imprime el numero de ronda actual
 print_round(Round) :-
-    swritef(R, '______________ RONDA %w______________', [Round]), nl, write(R), nl, nl.
+    swritef(R, '______________ %w______________', [Round]), nl, write(R), nl, nl.
 
 print_round(Round, 0) :-
     swritef(R, '______________ RONDA %w: MANTENIMIENTO______________', [Round]), nl, write(R), nl, nl.

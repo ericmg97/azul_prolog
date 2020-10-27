@@ -79,7 +79,7 @@ start_round(Bag, Players, Fact, Round) :-
 
     %chequea si la partida termina, si esto ocurre se muestra el vencedor y se termina la ejecucion,
     %en otro caso, se continua la simulacion
-    (game_over(NewPlayers, NewBag, Fact) -> (print_round("FINAL"), print_status(NewPlayers), get_winner(NewPlayers)); start_round(NewBag, NewPlayers, Fact, NewRound)).
+    (game_over(NewPlayers, NewBag, Fact) -> (print_round("RESULTADOS"), print_status(NewPlayers), get_winner(NewPlayers)); start_round(NewBag, NewPlayers, Fact, NewRound)).
     
 %ejecuta la jugada de todos los jugadores hasta que el suelo y las factorias se queden vacias
 play_round(Players, Floor, Factories, RPlayers) :- 
@@ -89,8 +89,10 @@ play_round(Players, Floor, Factories, RPlayers) :-
 
 %ejecuta un movimiento por jugador
 make_all_play(Players, Floor, Factories, Status) :- length(Players, L), make_all_play(Players, L, Floor, Factories, Status).
-make_all_play(Players, 0, Floor, Factories, Status) :- Status = [Players, Factories, Floor], !.
+make_all_play(Players, 0, Floor, Factories, Status) :- Status = [Players, Factories, Floor].
 make_all_play(Players, PL, Floor, Factories, Status) :- 
+    (end_round(Factories, Floor) -> Status = [Players, Factories, Floor];(
+    
     length(Players, L),
     P is L - PL,
 
@@ -103,7 +105,7 @@ make_all_play(Players, PL, Floor, Factories, Status) :-
     replace(P, Players, NewPlayer, NewPlayers),
 
     I is PL - 1,
-    make_all_play(NewPlayers, I, NewFloor, NewFactories, Status).
+    make_all_play(NewPlayers, I, NewFloor, NewFactories, Status))).
 
 %ejecuta un movimiento de un jugador con la estrategia dada 
 player_move(Player, Floor, Factories, [NewPlayer, NewFactories, NewFloor]) :- 
