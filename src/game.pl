@@ -83,18 +83,17 @@ start_round(Bag, Players, Fact, Round) :-
 %ejecuta la jugada de todos los jugadores hasta que el suelo y las factorias se queden vacias
 play_round(Players, Floor, Factories, RPlayers) :- 
     make_all_play(Players, Floor, Factories, [NewPlayers, NewFactories, NewFloor]),
-    
-    (end_round(NewFactories, NewFloor) -> RPlayers = NewPlayers; play_round(NewPlayers, NewFloor, NewFactories, RPlayers)).
+
+    (end_round(NewFactories, NewFloor) -> RPlayers = NewPlayers ; play_round(NewPlayers, NewFloor, NewFactories, RPlayers)).
 
 %ejecuta un movimiento por jugador
-make_all_play(Players, Floor, Factories, Status) :- length(Players, L), make_all_play(Players, L, Factories, Floor, Status).
-
+make_all_play(Players, Floor, Factories, Status) :- length(Players, L), make_all_play(Players, L, Floor, Factories, Status).
 make_all_play(Players, 0, Floor, Factories, Status) :- Status = [Players, Factories, Floor], !.
 make_all_play(Players, PL, Floor, Factories, Status) :- 
     length(Players, L),
-    P is L - PL + 1,
+    P is L - PL,
 
-    nth1(P, Players, Player),
+    nth0(P, Players, Player),
 
     %el jugador player, realiza un movimiento y retorna el estado de su tablero, de las factorias y del suelo
     player_move(Player, Floor, Factories, [NewPlayer, NewFactories, NewFloor]),
@@ -110,29 +109,48 @@ player_move(Player, Floor, Factories, [NewPlayer, NewFactories, NewFloor]) :-
     append([Floor], Factories, Places),
 
     take_random_more(Places, [Taken, NewFactories, NewFloor]),
-    put_best_row(Player, Taken, NewPlayer).
+    length(Taken, LT),
+    ((LT > 0) -> put_best_row(Player, Taken, NewPlayer); NewPlayer = Player).
 
 take_random_more(Places, [Taken, NewFactories, NewFloor]) :-
     length(Places, LP),
-    random_between(1, LP, R),
-    nth1(R, Places, Place),
+    check_valid_moves(Places, LP, Valid),
+    findall(X, (member(X, Valid), X \= -1), Moves),
+    length(Moves, ML),
+    
+    (ML == 0 -> 
+        (take(1, Places, NewFloor),
+        del(1, Places, NewFactories),
+        Taken = []); 
+        
+        (random_between(1, ML, R),
+        nth1(R, Moves, Pl),
+        nth1(Pl, Places, Place),
+        max_repeated(Place, Color),
+        take_color(Color, Places, Pl, [Taken, NewFactories, NewFloor]))
+    ).
 
-    max_repeated(Place, Color),
-    take_color(Color, Places, R, [Taken, NewFactories, NewFloor]).
+check_valid_moves(_, 0, Valid) :- Valid = [].
+check_valid_moves(Places, I, [V|Valid]):- 
+    nth1(I, Places, Place),
+    length(Place, PL),
+    ((PL > 0, Place \= [-1]) -> (V = I);(V = -1)),
+    J is I - 1,
+    check_valid_moves(Places, J, Valid).
 
 take_color(Color, Places, I, [Taken, NewFactories, NewFloor]) :-
-    nth0(I, Places, Place),
+    nth1(I, Places, Place),
     
     findall(X,(member(X, Place), X == Color), FTaken),
-    (member(-1, Place) -> (append(FTaken, -1, Taken), delete(Place, -1, NPlace)); ( NPlace = Place, Taken = FTaken)),
+    (member(-1, Place) -> (append(FTaken, [-1], Taken), delete(Place, -1, NPlace)); ( NPlace = Place, Taken = FTaken)),
 
     del(1, Places, Factories),
 
-    (I == 0 ->  (delete(NPlace, Color, NewFloor), NewFactories = Factories); 
+    (I == 1 ->  (delete(NPlace, Color, NewFloor), NewFactories = Factories); 
                 (delete(NPlace, Color, NewPlace), 
                 take(1, Places, Floor), 
-                append(Floor, NewPlace, NewFloor)),
-                Fact is I + 1,
+                flatten([Floor, NewPlace], NewFloor)),
+                Fact is I - 2,
                 replace(Fact, Factories, [], NewFactories)).
 
 put_best_row(Player, Taken, NewPlayer) :- 
@@ -146,12 +164,19 @@ put_best_row(Player, Taken, NewPlayer) :-
     
     Rows = [NewRow0, NewRow1, NewRow2, NewRow3, NewRow4],
     Trash = [Trash0, Trash1, Trash2, Trash3, Trash4],
-
-    min_list(Trash, Min),
-    indexOf(Trash, Min, I),
-    nth0(I, Rows, NewRow),
     
+    length(Trash0,LT0), 
+    length(Trash1,LT1), 
+    length(Trash2,LT2), 
+    length(Trash3,LT3), 
+    length(Trash4,LT4), 
+    
+    LTrash = [LT0, LT1, LT2, LT3, LT4],
+
+    min_list(LTrash, Min),
+    indexOf(LTrash, Min, I),
     nth0(I, Trash, NTrash),
+    nth0(I, Rows, NewRow),
     nth0(2, Player, PTrash),
     put_trash(PTrash, NTrash, NewTrash),
 
@@ -160,22 +185,33 @@ put_best_row(Player, Taken, NewPlayer) :-
     replace(2, SPlayer, NewTrash, NewPlayer).
 
 put_taken(Taken, Row, [NewRow, Trash]) :-
-    (member(-1, Taken) -> Ntrash = [-1]; Ntrash = []),
+    (member(-1, Taken) -> (Ntrash = [-1], delete(Taken, -1, FTaken)); (Ntrash = [], FTaken = Taken)),
 
     length(Row, RowL),
 
-    nth0(0, Taken, Color),
+    nth0(0, FTaken, Color),
     nth0(0, Row, RowColor),
 
-    (RowColor == 0 ; RowColor == Color),
+    ((RowColor \= 0 , RowColor \= Color) -> 
+        (Trash = Taken, NewRow = Row);
     
-    findall(X, (member(X, Row), X == Color), C),
-    append(C, Taken, NewR),
-    length(NewR, LR),
+        (findall(X, (member(X, Row), X == Color), C),
+        append(C, FTaken, NewR),
+        length(NewR, LR),
 
-    ((LR < RowL) -> 
-        (L is RowL - 1, findall(0, between(LR, L, _), Rest), append(NewR, Rest, NewRow), Trash = Ntrash);
-    (Diff is LR - RowL, take(Diff, NewR, DTrash), append(Ntrash, DTrash, Trash), del(Diff, NewR, NewRow))).
+            ((LR < RowL) -> 
+                (L is RowL - 1, 
+                findall(0, between(LR, L, _), Rest), 
+                append(NewR, Rest, NewRow), 
+                Trash = Ntrash);
+
+                (Diff is LR - RowL, 
+                take(Diff, NewR, DTrash), 
+                append(Ntrash, DTrash, Trash), 
+                del(Diff, NewR, NewRow))
+            )
+        )
+    ).
 
 put_trash(PlayerTrash, Add, NewTrash) :-
     findall(Y, (member(Y, PlayerTrash), Y \= 0), Ok),
