@@ -249,9 +249,10 @@ format_trash([F|Format], [L|List], [N|RList]) :-
 %-orden de los jugadores para la siguiente ronda
 %-fichas sobrantes de la ronda puestas en la bolsa
 refresh_status(Players, Bag, RBoard) :- 
-    length(Players, P),
-    check_first(Players, P, Player),
-    shift(Players, Player, OrderedPlayers),
+    check_first(Players, Player),
+    
+    Sh is Player - 1,
+    shift(Players, Sh, OrderedPlayers),
 
     refresh_boards(OrderedPlayers, [NewPlayers, Trash]),
     
@@ -262,19 +263,22 @@ refresh_status(Players, Bag, RBoard) :-
     RBoard = [NewPlayers, NewBag].
 
 % retorna el jugador que escogio la ficha FIRST
-check_first(Players, FPlayer) :- length(Players, P), check_first(Players, P, FPlayer).
-check_first([P|_], 0, FPlayer) :- nth0(4, P, Id), FPlayer = Id, !.
-check_first(Players, P, FPlayer):-
-    length(Players, L),
-    Actual is L - P,
+check_first(Players, FPlayer) :- 
+    length(Players, P), 
+    check_first(Players, P, Player), 
+    findall(X, (member(X, Player), X \= []), F1Player),
+    flatten(F1Player, F2Player),
+    nth0(0, F2Player, FPlayer).
 
-    nth0(Actual, Players, Player),
+check_first(_, 0, FPlayer) :- FPlayer = [].
+check_first(Players, P, [F|FPlayer]):-
+    nth1(P, Players, Player),
     nth0(2, Player, Garbage),
-    nth0(4, Player, Id),
-
+    
+    (member(_: -1, Garbage) -> F = [P]; F = []),
+    
     I is P - 1,
-
-    (member(_:-1, Garbage) -> FPlayer = Id; check_first(Players, I, FPlayer)).
+    check_first(Players, I, FPlayer).
 
 %actualiza el estado de los tableros de los jugadores luego de una ronda
 refresh_boards(Players, Status) :- length(Players, P), refresh_boards(Players, P, [], Status).
