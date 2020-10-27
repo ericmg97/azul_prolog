@@ -1,6 +1,12 @@
 %imprime el numero de ronda actual
 print_round(Round) :-
-    swritef(R, '______________RONDA %w______________', [Round]), nl, write(R), nl, nl.
+    swritef(R, '______________ RONDA %w______________', [Round]), nl, write(R), nl, nl.
+
+print_round(Round, 0) :-
+    swritef(R, '______________ RONDA %w: MANTENIMIENTO______________', [Round]), nl, write(R), nl, nl.
+
+print_round(Round, 1) :-
+    swritef(R, '______________ RONDA %w: SELECCION______________', [Round]), nl, write(R), nl, nl.
 
 %imprime el estado de la partida
 print_status(Players) :-

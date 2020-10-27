@@ -1,5 +1,5 @@
 :- [utils, visual].
-:- dynamic max_repeated/2, matrix/4, indexOf/3, shift/3, print_winners/2, print_winners/2, print_status/1, print_winners/1, print_round/1, print_status/2, replace/4, del/3, take/3.
+:- dynamic max_repeated/2, matrix/4, indexOf/3, shift/3, print_winners/2, print_winners/2, print_status/1, print_winners/1, print_round/2, print_round/1, print_status/2, replace/4, del/3, take/3.
 
 %iniciar la partida dependiendo de la cantidad de jugadores
 play(2) :- create_bag(Bag), board(1, B1), board(2, B2), start_round(Bag, [B1, B2], 5, 0).
@@ -49,7 +49,7 @@ create_round(N, Bag, [F|Status]) :-
 
 %ejecuta el juego ronda por ronda
 start_round(Bag, Players, Fact, Round) :- 
-    
+
     %crea las factorias extrayendo de la bolsa para empezar la ronda
     create_round(Fact, Bag, Status),
     
@@ -57,12 +57,16 @@ start_round(Bag, Players, Fact, Round) :-
     del(Fact, Status, [RBag, Floor]),
 
     %imprime el estado de la partida
-    print_round(Round),
+    print_round(Round, 0),
     print_status(Players, Factories),
+
+    %espera por la interaccion del usuario para continuar
+    get_single_char(_),
 
     %ejecuta una ronda de movimientos de jugadores dejando el resultado en RPlayers
     play_round(Players, Floor, Factories, RPlayers),
 
+    print_round(Round, 1),
     print_status(RPlayers),
 
     %espera por la interaccion del usuario para continuar
@@ -72,9 +76,6 @@ start_round(Bag, Players, Fact, Round) :-
     refresh_status(RPlayers, RBag, [NewPlayers, NewBag]),
 
     NewRound is Round + 1,
-
-    %espera por la interaccion del usuario para continuar
-    get_single_char(_),
 
     %chequea si la partida termina, si esto ocurre se muestra el vencedor y se termina la ejecucion,
     %en otro caso, se continua la simulacion
@@ -155,34 +156,37 @@ take_color(Color, Places, I, [Taken, NewFactories, NewFloor]) :-
 
 put_best_row(Player, Taken, NewPlayer) :- 
     nth0(0, Player, Stair),
+    nth0(1, Player, Wall),
 
-    nth0(0, Stair, Row0), put_taken(Taken, Row0, [NewRow0, Trash0]),
-    nth0(1, Stair, Row1), put_taken(Taken, Row1, [NewRow1, Trash1]),
-    nth0(2, Stair, Row2), put_taken(Taken, Row2, [NewRow2, Trash2]),
-    nth0(3, Stair, Row3), put_taken(Taken, Row3, [NewRow3, Trash3]),
-    nth0(4, Stair, Row4), put_taken(Taken, Row4, [NewRow4, Trash4]),
+    nth0(0, Stair, Row0), put_taken(Taken, Row0, [NewRow0, Trash0]), nth0(0, Wall, Wall0), check_wall_color(Wall0, NewRow0, Trash0, LT0),
+    nth0(1, Stair, Row1), put_taken(Taken, Row1, [NewRow1, Trash1]), nth0(1, Wall, Wall1), check_wall_color(Wall1, NewRow1, Trash1, LT1),
+    nth0(2, Stair, Row2), put_taken(Taken, Row2, [NewRow2, Trash2]), nth0(2, Wall, Wall2), check_wall_color(Wall2, NewRow2, Trash2, LT2),
+    nth0(3, Stair, Row3), put_taken(Taken, Row3, [NewRow3, Trash3]), nth0(3, Wall, Wall3), check_wall_color(Wall3, NewRow3, Trash3, LT3),
+    nth0(4, Stair, Row4), put_taken(Taken, Row4, [NewRow4, Trash4]), nth0(4, Wall, Wall4), check_wall_color(Wall4, NewRow4, Trash4, LT4),
     
     Rows = [NewRow0, NewRow1, NewRow2, NewRow3, NewRow4],
+
     Trash = [Trash0, Trash1, Trash2, Trash3, Trash4],
-    
-    length(Trash0,LT0), 
-    length(Trash1,LT1), 
-    length(Trash2,LT2), 
-    length(Trash3,LT3), 
-    length(Trash4,LT4), 
-    
-    LTrash = [LT0, LT1, LT2, LT3, LT4],
+ 
+    FLTrash = [LT0, LT1, LT2, LT3, LT4],
+    delete(FLTrash, -1, LTrash),
 
     min_list(LTrash, Min),
-    indexOf(LTrash, Min, I),
+    indexOf(FLTrash, Min, I),
     nth0(I, Trash, NTrash),
+    length(NTrash, LNT),
     nth0(I, Rows, NewRow),
     nth0(2, Player, PTrash),
-    put_trash(PTrash, NTrash, NewTrash),
-
+    (LNT \= 0 -> put_trash(PTrash, NTrash, NewTrash); NewTrash = PTrash),
     replace(I, Stair, NewRow, NewStair),
     replace(0, Player, NewStair, SPlayer),
     replace(2, SPlayer, NewTrash, NewPlayer).
+
+check_wall_color(Wall, Row, Trash, LT) :-
+    nth0(0, Row, Color),
+    length(Trash, Lt),
+
+    (member(Color:1, Wall) -> (LT = -1); (LT = Lt)).
 
 put_taken(Taken, Row, [NewRow, Trash]) :-
     (member(-1, Taken) -> (Ntrash = [-1], delete(Taken, -1, FTaken)); (Ntrash = [], FTaken = Taken)),
@@ -214,20 +218,24 @@ put_taken(Taken, Row, [NewRow, Trash]) :-
     ).
 
 put_trash(PlayerTrash, Add, NewTrash) :-
-    findall(Y, (member(Y, PlayerTrash), Y \= 0), Ok),
+    findall(Y, (member(_:Y, PlayerTrash), Y \= 0), Ok),
     
     length(Ok, LO),
     take(LO, PlayerTrash, POk),
     del(LO, PlayerTrash, PFree),
 
-    findall([X:Y], member(X:Y, PFree), FPFree),
+    findall([X,Y], member(X:Y, PFree), FPFree),
     length(FPFree, LPF),
     take(LPF, Add, PAdd),
     
     format_trash(FPFree, PAdd, PRest),
     append(POk, PRest, NewTrash).
 
-format_trash([],[],RList) :- RList = [].
+format_trash([],[], RList) :- RList = [].
+format_trash([F|Format], [], [N|RList]) :- 
+    nth0(0, F, Val),
+    N = Val:0, 
+    format_trash(Format, [],RList).
 format_trash([F|Format], [L|List], [N|RList]) :- 
     nth0(0, F, Val),
     N = Val:L, 
@@ -246,7 +254,8 @@ refresh_status(Players, Bag, RBoard) :-
     refresh_boards(OrderedPlayers, [NewPlayers, Trash]),
     
     %rellena la bolsa con las fichas que sobraron de las escaleras de los jugadores y en sus basuras
-    append(Bag, Trash, NewBag),
+    append(Bag, Trash, NBag),
+    delete(NBag, -1, NewBag),
 
     RBoard = [NewPlayers, NewBag].
 
@@ -270,10 +279,11 @@ refresh_boards(Players, Status) :- length(Players, P), refresh_boards(Players, P
 refresh_boards(Players, 0, Trash, Status) :- Status = [Players, Trash].
 refresh_boards(Players, P, Trash, Status) :- 
     nth1(P, Players, Player),
+    P1 is P - 1,
 
     refresh_player_board(Player, [NewPlayer, NewTrash]),
     
-    replace(P, Players, NewPlayer, NewPlayers),
+    replace(P1, Players, NewPlayer, NewPlayers),
     
     append(Trash, NewTrash, FinalTrash),
 
@@ -282,11 +292,11 @@ refresh_boards(Players, P, Trash, Status) :-
 
 %actualiza el estado del tablero del jugador al finalizar la ronda y retorna ademas las losas descartadas
 refresh_player_board([Stair, Wall, Garbage, Punc, Id], [NewPlayer, Trash]) :- 
-    refresh_rows([Stair, Wall], Punc, 4, [], [[NewStair, NewWall], FirstPunc, FirstTrash]),  
+    refresh_rows([Stair, Wall], Punc, 5, [], [[NewStair, NewWall], FirstPunc, FirstTrash]),  
 
     take_garbage(Garbage, [NewGarbage, GTrash]),
 
-    length(Trash, LT),
+    length(GTrash, LT),
     (LT < 3 -> NewPunc is FirstPunc - LT;
         (LT < 6 -> (NewPunc is FirstPunc - 2 - ((LT - 2)*2));
             (LT < 9 -> (NewPunc is FirstPunc - 8 - ((LT - 5)*3));
@@ -296,27 +306,30 @@ refresh_player_board([Stair, Wall, Garbage, Punc, Id], [NewPlayer, Trash]) :-
     NewPlayer = [NewStair, NewWall, NewGarbage, NewPunc, Id].
 
 refresh_rows([Stair, Wall], Punctuation, 0, Trash, NewStWall) :- NewStWall = [[Stair, Wall], Punctuation, Trash], !.
-refresh_rows([Stair, Wall], Punctuation, Row, Trash, NewStWall):-  
+refresh_rows([Stair, Wall], Punctuation, R, Trash, NewStWall):-  
+    Row is R - 1,
     nth0(Row, Stair, RowS),
     nth0(Row, Wall, RowW),
     findall(X,(member(X, RowS), X \= 0), Slabes),
-    length(Stair, LS),
+    length(RowS, LRS),
+    length(Slabes, LS),
     
-    (Slabes == LS -> 
+    (LS == LRS -> 
         (nth0(0, RowS, Color), 
-        indexOf(RowW, Color, Index),
+        indexOf(RowW, Color:0, Index),
+        
         replace(Index, RowW, Color:1, NewRowW),
+        replace(Row, Wall, NewRowW, NewWall),
 
-        calc_punctuation(Wall, [Row, Index], NPunctuation),
+        findall(0, between(1, LS, _), NewRowS),     
+        replace(Row, Stair, NewRowS, NewStair),
+        
+        calc_punctuation(NewWall, [Row, Index], NPunctuation),
         NewPunctuation is Punctuation + NPunctuation,
 
         del(1, Slabes, Trs),
-        findall(0, between(1, LS, _), NewRowS),  
-
-        append(Trash, Trs, NewTrash),
-
-        replace(Row, Stair, NewRowS, NewStair),
-        replace(Row, Wall, NewRowW, NewWall));
+        append(Trash, Trs, NewTrash)
+        );
 
         (NewWall = Wall,
         NewStair = Stair,
@@ -324,7 +337,7 @@ refresh_rows([Stair, Wall], Punctuation, Row, Trash, NewStWall):-
         NewTrash = Trash)
         ),
     
-    NewR is Row - 1,
+    NewR is R - 1,
     refresh_rows([NewStair, NewWall], NewPunctuation, NewR, NewTrash, NewStWall).
     
 %calcular la puntuacion al poner una ficha
@@ -332,7 +345,7 @@ calc_punctuation(Wall, [Row, Col], Punctuation) :-
     matrix(Wall, Row, Col, Value),
 
     nth0(Row, Wall, WorkRow),
-    findall(Value, matrix(Wall, _, Col, Value), WorkColumn),
+    findall(V, matrix(Wall, _, Col, V), WorkColumn),
 
     nth0(0, Wall, Row0),
     nth0(1, Wall, Row1),
@@ -383,12 +396,11 @@ check_sum(List, Position, L, C, Count) :-
 
 
 %actualiza el estado de la basura de un jugador luego de haber jugado una ronda
-take_garbage(Player, Status) :-
-    nth0(2, Player, Garbage),
+take_garbage(Garbage, Status) :-
     findall(X, (member(X, Garbage), X \= (_:0)), Slabs),
     findall(X, member((_:X), Slabs), Trash),
-    garbage(Garbage),
-    Status = [Garbage, Trash].
+    garbage(NewGarbage),
+    Status = [NewGarbage, Trash].
 
 
 %chequea si se acabaron las losas en las factorias y en el suelo, si es asi, termina la ronda
