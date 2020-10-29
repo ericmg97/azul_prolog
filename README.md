@@ -15,13 +15,13 @@ Azul game match simulator implemented in Prolog.
 ### Run
 
 ```bash
-   ?- newGame(2).
+   ?- play(2).
 ```
 
 ```bash
-   ?- newGame(3).
+   ?- play(3).
 ```
 
 ```bash
-   ?- newGame(4).
+   ?- play(4).
 ```
