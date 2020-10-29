@@ -111,7 +111,10 @@ make_all_play(Players, PL, Floor, Factories, Status) :-
 player_move(Player, Floor, Factories, [NewPlayer, NewFactories, NewFloor]) :- 
     append([Floor], Factories, Places),
 
-    take_random_more(Places, [Taken, NewFactories, NewFloor]),
+    take_random_more(Places, [Taken, NFactories, NFloor]),
+    NewFactories = NFactories,
+    NewFloor = NFloor,
+    
     length(Taken, LT),
     ((LT > 0) -> put_best_row(Player, Taken, NewPlayer); NewPlayer = Player).
 
@@ -159,6 +162,7 @@ take_color(Color, Places, I, [Taken, NewFactories, NewFloor]) :-
 put_best_row(Player, Taken, NewPlayer) :- 
     nth0(0, Player, Stair),
     nth0(1, Player, Wall),
+    nth0(2, Player, PTrash),
 
     nth0(0, Stair, Row0), put_taken(Taken, Row0, [NewRow0, Trash0]), nth0(0, Wall, Wall0), check_wall_color(Wall0, NewRow0, Trash0, LT0),
     nth0(1, Stair, Row1), put_taken(Taken, Row1, [NewRow1, Trash1]), nth0(1, Wall, Wall1), check_wall_color(Wall1, NewRow1, Trash1, LT1),
@@ -173,16 +177,19 @@ put_best_row(Player, Taken, NewPlayer) :-
     FLTrash = [LT0, LT1, LT2, LT3, LT4],
     delete(FLTrash, -1, LTrash),
 
-    min_list(LTrash, Min),
+    length(LTrash, LT),
+    (LT == 0 -> 
+        (put_trash(PTrash, Taken, NewTrash), replace(2, Player, NewTrash, NewPlayer));
+
+    (min_list(LTrash, Min),
     indexOf(FLTrash, Min, I),
     nth0(I, Trash, NTrash),
     length(NTrash, LNT),
     nth0(I, Rows, NewRow),
-    nth0(2, Player, PTrash),
     (LNT \= 0 -> put_trash(PTrash, NTrash, NewTrash); NewTrash = PTrash),
     replace(I, Stair, NewRow, NewStair),
     replace(0, Player, NewStair, SPlayer),
-    replace(2, SPlayer, NewTrash, NewPlayer).
+    replace(2, SPlayer, NewTrash, NewPlayer))).
 
 check_wall_color(Wall, Row, Trash, LT) :-
     nth0(0, Row, Color),
@@ -193,7 +200,11 @@ check_wall_color(Wall, Row, Trash, LT) :-
 put_taken(Taken, Row, [NewRow, Trash]) :-
     (member(-1, Taken) -> (Ntrash = [-1], delete(Taken, -1, FTaken)); (Ntrash = [], FTaken = Taken)),
 
-    length(Row, RowL),
+    length(FTaken, LFT),
+    
+    (LFT == 0 -> (NewRow = Row, Trash = Ntrash);
+    
+    (length(Row, RowL),
 
     nth0(0, FTaken, Color),
     nth0(0, Row, RowColor),
@@ -217,21 +228,24 @@ put_taken(Taken, Row, [NewRow, Trash]) :-
                 del(Diff, NewR, NewRow))
             )
         )
-    ).
+    ))).
 
 put_trash(PlayerTrash, Add, NewTrash) :-
-    findall(Y, (member(_:Y, PlayerTrash), Y \= 0), Ok),
+    findall(Y, (member((_:Y), PlayerTrash), Y == 0), Free),
+    length(Free, LF),
+    LOk is 7 - LF,
     
-    length(Ok, LO),
-    take(LO, PlayerTrash, POk),
-    del(LO, PlayerTrash, PFree),
+    take(LOk, PlayerTrash, POk),
+    del(LOk, PlayerTrash, PFree),
 
     findall([X,Y], member(X:Y, PFree), FPFree),
     length(FPFree, LPF),
     take(LPF, Add, PAdd),
     
     format_trash(FPFree, PAdd, PRest),
-    append(POk, PRest, NewTrash).
+    append(POk, PRest, NTrash),
+    length(NTrash, CH),
+    (CH > 7 -> (put_trash(PlayerTrash, Add, NewTrash)); (NewTrash = NTrash)).
 
 format_trash([],[], RList) :- RList = [].
 format_trash([F|Format], [], [N|RList]) :- 
@@ -305,7 +319,7 @@ refresh_player_board([Stair, Wall, Garbage, Punc, Id], [NewPlayer, Trash]) :-
     length(GTrash, LT),
     (LT < 3 -> NewPunc is FirstPunc - LT;
         (LT < 6 -> (NewPunc is FirstPunc - 2 - ((LT - 2)*2));
-            (LT < 9 -> (NewPunc is FirstPunc - 8 - ((LT - 5)*3));
+            (LT < 8 -> (NewPunc is FirstPunc - 8 - ((LT - 5)*3));
                 NewPunc is FirstPunc - 12))),
     
     append(FirstTrash, GTrash, Trash),
@@ -386,7 +400,6 @@ calc_punctuation(Wall, [Row, Col], Punctuation) :-
 
 %chequea la cantidad de losas contiguas en una lista hacia la izquierda
 check_minus(List, Position, Count) :- check_minus(List, Position, 0, Count).
-
 check_minus(_, 0, C, Count) :- Count = C.
 check_minus(List, Position, C, Count) :- 
     NewPosition is Position - 1,
@@ -394,7 +407,6 @@ check_minus(List, Position, C, Count) :-
 
 %chequea la cantidad de losas contiguas en una lista hacia la derecha
 check_sum(List, Position, Count) :- length(List, L), check_sum(List, Position, L, 0, Count).
-
 check_sum(_, L, L, C, Count) :- Count = C.
 check_sum(List, Position, L, C, Count) :- 
     NewPosition is Position + 1,
@@ -418,7 +430,7 @@ end_round(Factories, Floor) :-
 %obtiene el mejor jugador y su puntuacion
 get_winner(Players) :- 
     length(Players, L),
-    get_winner(Players, L, 0, []).
+    get_winner(Players, L, -10000, []).
 
 get_winner(_, 0, Best, Winners) :- print_winners(Best, Winners), !.
 get_winner(Players, Actual, Best, Winners) :-
